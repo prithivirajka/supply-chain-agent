@@ -1,0 +1,298 @@
+version: 2
+
+sources:
+  - name: olist
+    description: >
+      Raw Olist Brazilian E-Commerce dataset. Contains ~100k orders placed
+      between 2016 and 2018 across multiple marketplaces in Brazil.
+      Downloaded from https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce
+    database: "{{ env_var('DBT_SOURCE_DB', 'supply_chain') }}"
+    schema: "{{ env_var('DBT_SOURCE_SCHEMA', 'raw') }}"
+    loader: csv_seed
+
+    # Source-level freshness — warn if data is older than 7 days
+    freshness:
+      warn_after: {count: 7, period: day}
+      error_after: {count: 30, period: day}
+    loaded_at_field: _loaded_at
+
+    tables:
+
+      # ------------------------------------------------------------------ #
+      # ORDERS                                                               #
+      # ------------------------------------------------------------------ #
+      - name: orders
+        identifier: olist_orders_dataset
+        description: >
+          Master orders table. Each row is one order. An order can have
+          multiple items (see order_items). Status lifecycle:
+          created → approved → processing → shipped → delivered / canceled.
+        columns:
+          - name: order_id
+            description: Unique order identifier (UUID).
+            tests:
+              - unique
+              - not_null
+          - name: customer_id
+            description: FK to customers table.
+            tests:
+              - not_null
+              - relationships:
+                  to: source('olist', 'customers')
+                  field: customer_id
+          - name: order_status
+            description: Current status of the order.
+            tests:
+              - not_null
+              - accepted_values:
+                  values: ['delivered', 'shipped', 'canceled', 'unavailable',
+                           'invoiced', 'processing', 'approved', 'created']
+          - name: order_purchase_timestamp
+            description: Timestamp when the customer placed the order.
+            tests: [not_null]
+          - name: order_approved_at
+            description: Timestamp when payment was approved. Nullable.
+          - name: order_delivered_carrier_date
+            description: Timestamp when the order was handed to the carrier.
+          - name: order_delivered_customer_date
+            description: Actual delivery timestamp. Null if not yet delivered.
+          - name: order_estimated_delivery_date
+            description: Estimated delivery date shown to the customer at purchase.
+            tests: [not_null]
+
+      # ------------------------------------------------------------------ #
+      # ORDER ITEMS                                                          #
+      # ------------------------------------------------------------------ #
+      - name: order_items
+        identifier: olist_order_items_dataset
+        description: >
+          Line items within each order. One order can have multiple items
+          from multiple sellers. Price and freight_value are per item.
+        columns:
+          - name: order_id
+            description: FK to orders table.
+            tests:
+              - not_null
+              - relationships:
+                  to: source('olist', 'orders')
+                  field: order_id
+          - name: order_item_id
+            description: Sequential item number within the order (1-based).
+            tests: [not_null]
+          - name: product_id
+            description: FK to products table.
+            tests:
+              - not_null
+              - relationships:
+                  to: source('olist', 'products')
+                  field: product_id
+          - name: seller_id
+            description: FK to sellers table.
+            tests:
+              - not_null
+              - relationships:
+                  to: source('olist', 'sellers')
+                  field: seller_id
+          - name: shipping_limit_date
+            description: Deadline by which the seller must hand off to the carrier.
+            tests: [not_null]
+          - name: price
+            description: Item price in BRL.
+            tests:
+              - not_null
+              - dbt_expectations.expect_column_values_to_be_between:
+                  min_value: 0
+                  strictly: true
+          - name: freight_value
+            description: Freight cost for this item in BRL.
+            tests:
+              - not_null
+              - dbt_expectations.expect_column_values_to_be_between:
+                  min_value: 0
+
+      # ------------------------------------------------------------------ #
+      # ORDER PAYMENTS                                                       #
+      # ------------------------------------------------------------------ #
+      - name: order_payments
+        identifier: olist_order_payments_dataset
+        description: >
+          Payment transactions for orders. An order can be split across
+          multiple payment types (e.g. credit card + voucher).
+        columns:
+          - name: order_id
+            description: FK to orders table.
+            tests:
+              - not_null
+              - relationships:
+                  to: source('olist', 'orders')
+                  field: order_id
+          - name: payment_sequential
+            description: Sequence number when multiple payments exist for one order.
+            tests: [not_null]
+          - name: payment_type
+            description: Payment method used.
+            tests:
+              - not_null
+              - accepted_values:
+                  values: ['credit_card', 'boleto', 'voucher', 'debit_card',
+                           'not_defined']
+          - name: payment_installments
+            description: Number of installments chosen by the customer.
+            tests: [not_null]
+          - name: payment_value
+            description: Transaction amount in BRL.
+            tests:
+              - not_null
+              - dbt_expectations.expect_column_values_to_be_between:
+                  min_value: 0
+
+      # ------------------------------------------------------------------ #
+      # ORDER REVIEWS                                                        #
+      # ------------------------------------------------------------------ #
+      - name: order_reviews
+        identifier: olist_order_reviews_dataset
+        description: >
+          Customer satisfaction reviews. Customers receive a survey after
+          delivery. Score ranges from 1 (worst) to 5 (best).
+        columns:
+          - name: review_id
+            description: Unique review identifier.
+            tests: [not_null]
+          - name: order_id
+            description: FK to orders table.
+            tests:
+              - not_null
+              - relationships:
+                  to: source('olist', 'orders')
+                  field: order_id
+          - name: review_score
+            description: Customer rating from 1 to 5.
+            tests:
+              - not_null
+              - accepted_values:
+                  values: [1, 2, 3, 4, 5]
+          - name: review_creation_date
+            description: Date the review survey was sent.
+          - name: review_answer_timestamp
+            description: Timestamp when the customer submitted the review.
+
+      # ------------------------------------------------------------------ #
+      # CUSTOMERS                                                            #
+      # ------------------------------------------------------------------ #
+      - name: customers
+        identifier: olist_customers_dataset
+        description: >
+          Customer dimension. Note: customer_id is unique per order, not per
+          person. customer_unique_id identifies the actual customer across orders.
+        columns:
+          - name: customer_id
+            description: Unique per-order customer key (not the person's ID).
+            tests: [unique, not_null]
+          - name: customer_unique_id
+            description: True unique customer identifier (one per person).
+            tests: [not_null]
+          - name: customer_zip_code_prefix
+            description: First 5 digits of the customer's zip code.
+          - name: customer_city
+            description: Customer city name.
+          - name: customer_state
+            description: Two-letter Brazilian state code.
+            tests:
+              - not_null
+              - dbt_expectations.expect_column_value_lengths_to_equal:
+                  value: 2
+
+      # ------------------------------------------------------------------ #
+      # SELLERS                                                              #
+      # ------------------------------------------------------------------ #
+      - name: sellers
+        identifier: olist_sellers_dataset
+        description: Seller dimension with location information.
+        columns:
+          - name: seller_id
+            description: Unique seller identifier.
+            tests: [unique, not_null]
+          - name: seller_zip_code_prefix
+            description: First 5 digits of the seller's zip code.
+          - name: seller_city
+            description: Seller city name.
+          - name: seller_state
+            description: Two-letter Brazilian state code.
+            tests: [not_null]
+
+      # ------------------------------------------------------------------ #
+      # PRODUCTS                                                             #
+      # ------------------------------------------------------------------ #
+      - name: products
+        identifier: olist_products_dataset
+        description: Product dimension with category and physical dimensions.
+        columns:
+          - name: product_id
+            description: Unique product identifier.
+            tests: [unique, not_null]
+          - name: product_category_name
+            description: Product category name in Portuguese. FK to category translation.
+          - name: product_name_length
+            description: Character count of the product name.
+          - name: product_description_length
+            description: Character count of the product description.
+          - name: product_photos_qty
+            description: Number of product photos published.
+          - name: product_weight_g
+            description: Product weight in grams.
+          - name: product_length_cm
+            description: Product length in cm.
+          - name: product_height_cm
+            description: Product height in cm.
+          - name: product_width_cm
+            description: Product width in cm.
+
+      # ------------------------------------------------------------------ #
+      # PRODUCT CATEGORY TRANSLATION                                        #
+      # ------------------------------------------------------------------ #
+      - name: product_category_name_translation
+        identifier: product_category_name_translation
+        description: >
+          Maps Portuguese product category names to English equivalents.
+        columns:
+          - name: product_category_name
+            description: Category name in Portuguese.
+            tests: [unique, not_null]
+          - name: product_category_name_english
+            description: Category name in English.
+            tests: [not_null]
+
+      # ------------------------------------------------------------------ #
+      # GEOLOCATION                                                          #
+      # ------------------------------------------------------------------ #
+      - name: geolocation
+        identifier: olist_geolocation_dataset
+        description: >
+          Maps Brazilian zip code prefixes to lat/lng coordinates and city/state.
+          Note: one zip code prefix can have multiple coordinate rows —
+          use aggregation (avg lat/lng) when joining.
+        columns:
+          - name: geolocation_zip_code_prefix
+            description: Five-digit zip code prefix.
+            tests: [not_null]
+          - name: geolocation_lat
+            description: Latitude.
+            tests:
+              - dbt_expectations.expect_column_values_to_be_between:
+                  min_value: -33.75
+                  max_value: 5.27
+                  config:
+                    severity: warn
+          - name: geolocation_lng
+            description: Longitude.
+            tests:
+              - dbt_expectations.expect_column_values_to_be_between:
+                  min_value: -73.99
+                  max_value: -34.79
+                  config:
+                    severity: warn
+          - name: geolocation_city
+            description: City name.
+          - name: geolocation_state
+            description: Two-letter state code.
+

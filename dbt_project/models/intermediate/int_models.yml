@@ -1,0 +1,127 @@
+version: 2
+
+models:
+
+  - name: int_orders_enriched
+    description: >
+      One wide row per order combining stg_orders, aggregated order items,
+      aggregated payments, and the latest review. Ephemeral — compiled
+      inline into mart queries.
+    columns:
+      - name: order_id
+        tests: [unique, not_null]
+      - name: customer_id
+        tests: [not_null]
+      - name: order_gross_total
+        description: Sum of (item_price + freight_value) across all items.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+      - name: total_payment_value
+        description: Sum of all payment transactions for the order.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+      - name: item_count
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+      - name: is_high_value_order
+        tests: [not_null]
+
+  - name: int_delivery_performance
+    description: >
+      Delivery timing metrics for every delivered order. Includes
+      days_to_deliver, days_vs_estimate (positive = early, negative = late),
+      is_late, is_critical_delay, seller_shipped_on_time, and delivery_status label.
+      Only contains rows where is_delivered = true.
+    columns:
+      - name: order_id
+        tests: [unique, not_null]
+      - name: days_to_deliver
+        description: Days from order purchase to customer delivery.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+      - name: days_vs_estimate
+        description: >
+          Difference between estimated and actual delivery in days.
+          Positive = delivered before estimate (early). Negative = late.
+      - name: is_late
+        tests: [not_null]
+      - name: is_critical_delay
+        tests: [not_null]
+      - name: delivery_status
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['early', 'on_time', 'late', 'critical']
+
+  - name: int_seller_performance
+    description: >
+      Per-seller aggregated scorecard. Includes total orders, revenue,
+      review quality metrics, delivery performance rates, and coordinates.
+      Excludes cancelled orders.
+    columns:
+      - name: seller_id
+        tests: [unique, not_null]
+      - name: total_orders
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 1
+      - name: total_revenue
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+      - name: avg_review_score
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 1
+                max_value: 5
+      - name: late_delivery_rate
+        description: Proportion of delivered orders that were late (0–1).
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: positive_review_rate
+        description: Proportion of reviewed orders with positive sentiment (0–1).
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 1
+
+  - name: int_customer_orders
+    description: >
+      Customer-level order history grouped by customer_unique_id.
+      Includes LTV, order counts, review averages, recency segment,
+      and repeat customer flag. Excludes cancelled orders.
+    columns:
+      - name: customer_unique_id
+        tests: [unique, not_null]
+      - name: total_orders
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 1
+      - name: lifetime_gross_value
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+      - name: is_repeat_customer
+        tests: [not_null]
+      - name: recency_segment
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['active', 'lapsed', 'churned']

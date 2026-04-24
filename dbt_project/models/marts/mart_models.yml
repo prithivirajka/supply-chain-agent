@@ -1,0 +1,274 @@
+version: 2
+
+models:
+
+  # ────────────────────────────────────────────────────────────────────────
+  # MART_ORDERS
+  # ────────────────────────────────────────────────────────────────────────
+  - name: mart_orders
+    description: >
+      Complete order fact table. One row per order. The primary table
+      the agent queries for order-level questions about volume, revenue,
+      payment behaviour, and review scores. Includes customer state/city
+      and primary product category context.
+    columns:
+      - name: order_id
+        tests: [unique, not_null]
+      - name: customer_id
+        tests: [not_null]
+      - name: customer_unique_id
+        tests: [not_null]
+      - name: order_status
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['delivered','shipped','canceled','unavailable',
+                       'invoiced','processing','approved','created']
+      - name: order_date
+        tests: [not_null]
+      - name: order_month
+        tests: [not_null]
+      - name: order_year
+        tests: [not_null]
+      - name: order_gross_total
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+      - name: total_payment_value
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+      - name: item_count
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+      - name: is_delivered
+        tests: [not_null]
+      - name: is_canceled
+        tests: [not_null]
+      - name: is_high_value_order
+        tests: [not_null]
+      - name: review_sentiment
+        tests:
+          - accepted_values:
+              values: ['positive', 'neutral', 'negative']
+              config:
+                where: "review_sentiment is not null"
+
+  # ────────────────────────────────────────────────────────────────────────
+  # MART_DELIVERY
+  # ────────────────────────────────────────────────────────────────────────
+  - name: mart_delivery
+    description: >
+      Delivery performance fact table. One row per delivered order.
+      Covers all timing metrics, late flags, seller shipping compliance,
+      and geographic context (customer state vs seller state).
+      Use this table for on-time rate, delay analysis, and regional
+      delivery performance questions.
+    columns:
+      - name: order_id
+        tests: [unique, not_null]
+      - name: customer_state
+        tests: [not_null]
+      - name: days_to_deliver
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+      - name: days_vs_estimate
+        description: >
+          Positive = delivered before estimate (early).
+          Negative = delivered after estimate (late).
+      - name: is_late
+        tests: [not_null]
+      - name: is_critical_delay
+        tests: [not_null]
+      - name: delivery_status
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['early', 'on_time', 'late', 'critical']
+      - name: seller_shipped_on_time
+        tests: [not_null]
+
+  # ────────────────────────────────────────────────────────────────────────
+  # MART_SELLERS
+  # ────────────────────────────────────────────────────────────────────────
+  - name: mart_sellers
+    description: >
+      Seller scorecard. One row per seller. Combines revenue totals,
+      review quality, delivery reliability, and a composite seller_score
+      (weighted index of positive_review_rate, on-time delivery rate,
+      and order volume). Use for seller ranking and performance queries.
+    columns:
+      - name: seller_id
+        tests: [unique, not_null]
+      - name: total_orders
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+      - name: total_revenue
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+      - name: avg_review_score
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 5
+      - name: late_delivery_rate
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1
+      - name: positive_review_rate
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1
+      - name: on_time_ship_rate
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1
+      - name: seller_score
+        description: >
+          Composite score (0–1). Weighted index:
+          positive_review_rate × 0.4 + (1 - late_delivery_rate) × 0.4
+          + volume_factor × 0.2.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1
+
+  # ────────────────────────────────────────────────────────────────────────
+  # MART_PRODUCTS
+  # ────────────────────────────────────────────────────────────────────────
+  - name: mart_products
+    description: >
+      Product analytics mart. One row per product. Combines product
+      attributes (weight, dimensions, category) with sales performance
+      (units sold, revenue) and review quality. freight_to_price_ratio
+      highlights products with high logistics cost relative to price.
+    columns:
+      - name: product_id
+        tests: [unique, not_null]
+      - name: total_orders
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+      - name: total_revenue
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+      - name: avg_item_price
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+      - name: freight_to_price_ratio
+        description: >
+          Average freight cost as a proportion of item price.
+          High values indicate logistics-heavy products.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              config:
+                where: "freight_to_price_ratio is not null"
+
+  # ────────────────────────────────────────────────────────────────────────
+  # MART_CUSTOMERS
+  # ────────────────────────────────────────────────────────────────────────
+  - name: mart_customers
+    description: >
+      Customer analytics mart. One row per customer_unique_id.
+      Combines lifetime value, order history, review behaviour,
+      recency segment (active / lapsed / churned), value tier
+      (high / mid / low), and a composite customer_engagement_score.
+    columns:
+      - name: customer_unique_id
+        tests: [unique, not_null]
+      - name: total_orders
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+      - name: lifetime_gross_value
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+      - name: avg_order_value
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+      - name: is_repeat_customer
+        tests: [not_null]
+      - name: recency_segment
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['active', 'lapsed', 'churned']
+      - name: value_tier
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['high', 'mid', 'low']
+      - name: customer_engagement_score
+        description: >
+          Composite score (0–1). Weighted index:
+          recency (33%) + frequency (33%) + review satisfaction (34%).
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1
+
+  # ────────────────────────────────────────────────────────────────────────
+  # MART_SUPPLY_CHAIN_SUMMARY
+  # ────────────────────────────────────────────────────────────────────────
+  - name: mart_supply_chain_summary
+    description: >
+      Monthly supply chain KPI snapshot. One row per calendar month.
+      Aggregates order volume, revenue, delivery performance, customer
+      counts, review scores, and a static seller context snapshot.
+      Primary table for "give me an overview" and trend queries.
+    columns:
+      - name: order_month
+        description: First day of the calendar month (date truncated).
+        tests: [unique, not_null]
+      - name: order_year
+        tests: [not_null]
+      - name: total_orders
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+      - name: gross_revenue
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+      - name: avg_order_value
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+      - name: cancellation_rate
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1
+      - name: late_delivery_rate
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1
+              config:
+                where: "late_delivery_rate is not null"
+      - name: avg_review_score
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 5
+              config:
+                where: "avg_review_score is not null"
+      - name: positive_review_rate
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1
+              config:
+                where: "positive_review_rate is not null"

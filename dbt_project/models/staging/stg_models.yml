@@ -1,0 +1,221 @@
+version: 2
+
+models:
+
+  # ────────────────────────────────────────────────────────────────────────
+  # STG_ORDERS
+  # ────────────────────────────────────────────────────────────────────────
+  - name: stg_orders
+    description: >
+      Cleaned orders. One row per order. Timestamps cast, status validated,
+      and convenience flags added.
+    columns:
+      - name: order_id
+        tests: [unique, not_null]
+      - name: customer_id
+        description: Per-order customer key (FK to stg_customers).
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_customers')
+              field: customer_id
+      - name: order_status
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['delivered','shipped','canceled','unavailable',
+                       'invoiced','processing','approved','created']
+      - name: purchased_at
+        tests: [not_null]
+      - name: estimated_delivery_date
+        tests: [not_null]
+      - name: order_date
+        tests: [not_null]
+      - name: is_delivered
+        tests: [not_null]
+      - name: is_canceled
+        tests: [not_null]
+
+  # ────────────────────────────────────────────────────────────────────────
+  # STG_ORDER_ITEMS
+  # ────────────────────────────────────────────────────────────────────────
+  - name: stg_order_items
+    description: >
+      Cleaned order line items. One row per order + item sequence.
+      line_total = item_price + freight_value.
+    columns:
+      - name: order_id
+        description: FK to stg_orders.
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_orders')
+              field: order_id
+      - name: order_item_id
+        description: 1-based item sequence within the order.
+        tests: [not_null]
+      - name: product_id
+        description: FK to stg_products.
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_products')
+              field: product_id
+      - name: seller_id
+        description: FK to stg_sellers.
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_sellers')
+              field: seller_id
+      - name: shipping_limit_at
+        tests: [not_null]
+      - name: item_price
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              strictly: true
+      - name: freight_value
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+      - name: line_total
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              strictly: true
+
+  # ────────────────────────────────────────────────────────────────────────
+  # STG_ORDER_PAYMENTS
+  # ────────────────────────────────────────────────────────────────────────
+  - name: stg_order_payments
+    description: >
+      Cleaned payment transactions. One row per payment sequence per order.
+      payment_type_clean is null when the raw value is 'not_defined'.
+    columns:
+      - name: order_id
+        description: FK to stg_orders.
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_orders')
+              field: order_id
+      - name: payment_sequential
+        tests: [not_null]
+      - name: payment_type
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['credit_card','boleto','voucher','debit_card','not_defined']
+      - name: payment_installments
+        tests: [not_null]
+      - name: payment_value
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+      - name: is_installment_purchase
+        tests: [not_null]
+
+  # ────────────────────────────────────────────────────────────────────────
+  # STG_ORDER_REVIEWS
+  # ────────────────────────────────────────────────────────────────────────
+  - name: stg_order_reviews
+    description: >
+      Cleaned customer reviews. review_sentiment derived from project variables.
+    columns:
+      - name: review_id
+        tests: [not_null]
+      - name: order_id
+        description: FK to stg_orders.
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_orders')
+              field: order_id
+      - name: review_score
+        tests:
+          - not_null
+          - accepted_values:
+              values: [1, 2, 3, 4, 5]
+      - name: review_sentiment
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['positive', 'neutral', 'negative']
+
+  # ────────────────────────────────────────────────────────────────────────
+  # STG_CUSTOMERS
+  # ────────────────────────────────────────────────────────────────────────
+  - name: stg_customers
+    description: >
+      Cleaned customer dimension. customer_id is unique per order;
+      customer_unique_id is the true per-person identifier.
+    columns:
+      - name: customer_id
+        description: Per-order customer key — unique in this table.
+        tests: [unique, not_null]
+      - name: customer_unique_id
+        description: True customer identifier (one per person, may repeat).
+        tests: [not_null]
+      - name: zip_code_prefix
+        tests: [not_null]
+      - name: customer_state
+        tests: [not_null]
+
+  # ────────────────────────────────────────────────────────────────────────
+  # STG_SELLERS
+  # ────────────────────────────────────────────────────────────────────────
+  - name: stg_sellers
+    description: >
+      Cleaned seller dimension enriched with avg lat/lng from stg_geolocation.
+      Joins on zip_code_prefix only — guaranteed one row per seller.
+    columns:
+      - name: seller_id
+        tests: [unique, not_null]
+      - name: zip_code_prefix
+        tests: [not_null]
+      - name: seller_state
+        tests: [not_null]
+
+  # ────────────────────────────────────────────────────────────────────────
+  # STG_PRODUCTS
+  # ────────────────────────────────────────────────────────────────────────
+  - name: stg_products
+    description: >
+      Cleaned product dimension with English category name translation.
+      Source CSV has typo 'lenght' — corrected to 'length' in output columns.
+    columns:
+      - name: product_id
+        tests: [unique, not_null]
+      - name: product_category_name_en
+        description: English category name; falls back to Portuguese if translation missing.
+
+  # ────────────────────────────────────────────────────────────────────────
+  # STG_GEOLOCATION
+  # ────────────────────────────────────────────────────────────────────────
+  - name: stg_geolocation
+    description: >
+      Deduplicated geolocation lookup. One row per zip_code_prefix with
+      averaged coordinates. Bounds tests are warn-only because the source
+      CSV contains a small number of outlier coordinates outside Brazil.
+    columns:
+      - name: zip_code_prefix
+        tests: [unique, not_null]
+      - name: latitude
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -33.75
+              max_value: 5.27
+              config:
+                severity: warn
+      - name: longitude
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -73.99
+              max_value: -34.79
+              config:
+                severity: warn

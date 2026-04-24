@@ -1,0 +1,24 @@
+# dbt artifacts
+target/
+dbt_packages/
+logs/
+
+# Credentials — NEVER commit the real profiles.yml
+profiles.yml
+
+# Environment variables
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+
+# Data files (can be large)
+data/*.csv
+data/*.duckdb
+
+# OS
+.DS_Store
+Thumbs.db

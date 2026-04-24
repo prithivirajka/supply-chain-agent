@@ -1,0 +1,29 @@
+cd C:\Users\prith\Desktop\ai_project\supply-chain-agent
+
+# Create root .gitignore
+@"
+# DuckDB database file
+data/supply_chain.duckdb
+
+# Raw CSV files (large, download from Kaggle)
+data/*.csv
+
+# dbt artifacts
+dbt_project/target/
+dbt_project/dbt_packages/
+dbt_project/logs/
+dbt_project/.user.yml
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+
+# Environment variables
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+"@ | Out-File -FilePath ".gitignore" -Encoding utf8
