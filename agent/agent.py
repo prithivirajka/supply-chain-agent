@@ -1,14 +1,16 @@
 """
 agent.py
 ─────────────────────────────────────────────────────────────────────────────
-Builds and returns a LangGraph ReAct agent compatible with
-LangChain >= 1.0 / LangGraph >= 1.0.
+Builds and returns a LangChain agent using the current recommended API.
+
+LangChain >= 1.0 uses `langchain.agents.create_agent` (replaces the
+deprecated `langgraph.prebuilt.create_react_agent`).
 """
 
 import time
 import json
 from langchain_anthropic import ChatAnthropic
-from langgraph.prebuilt import create_react_agent
+from langchain.agents import create_agent
 from langchain_core.messages import HumanMessage
 
 from agent.config import (
@@ -26,7 +28,7 @@ from agent.prompts import SYSTEM_PROMPT
 
 def build_agent():
     """
-    Construct and return the LangGraph ReAct agent.
+    Construct and return the LangChain agent graph.
     Called once at API startup.
     """
     validate()
@@ -38,10 +40,12 @@ def build_agent():
         temperature=TEMPERATURE,
     )
 
-    agent = create_react_agent(
+    # create_agent is the current API in LangChain >= 1.0
+    # It replaces the deprecated langgraph.prebuilt.create_react_agent
+    agent = create_agent(
         model=llm,
         tools=TOOLS,
-        prompt=SYSTEM_PROMPT,
+        system_prompt=SYSTEM_PROMPT,
     )
 
     return agent
@@ -69,38 +73,35 @@ def run_query(agent, question: str) -> dict:
             config={"recursion_limit": MAX_ITERATIONS * 2},
         )
 
-        messages   = result.get("messages", [])
-        sql_used   = None
-        rows       = None
-        row_count  = 0
-        answer     = ""
+        messages  = result.get("messages", [])
+        sql_used  = None
+        rows      = None
+        row_count = 0
+        answer    = ""
 
-        # Walk all messages to extract tool calls, results, and final answer
         for msg in messages:
             msg_type = type(msg).__name__
 
-            # Tool call messages — extract SQL
+            # AIMessage with tool_calls → extract SQL from run_sql calls
             if msg_type == "AIMessage" and hasattr(msg, "tool_calls") and msg.tool_calls:
                 for tc in msg.tool_calls:
                     if tc.get("name") == "run_sql":
-                        args = tc.get("args", {})
+                        args     = tc.get("args", {})
                         sql_used = args.get("sql") or str(args)
 
-            # Tool result messages — extract rows
-            if msg_type == "ToolMessage":
+            # ToolMessage → extract rows from run_sql results
+            if msg_type == "ToolMessage" and sql_used:
                 try:
-                    obs = json.loads(msg.content)
-                    if "rows" in obs and sql_used:
+                    obs       = json.loads(msg.content)
+                    if "rows" in obs:
                         rows      = obs.get("rows")
                         row_count = obs.get("row_count", 0)
                 except (json.JSONDecodeError, TypeError):
                     pass
 
-            # Final AI answer (no tool calls = the response message)
+            # Final AIMessage with no tool calls = the answer
             if msg_type == "AIMessage":
-                has_tool_calls = (
-                    hasattr(msg, "tool_calls") and bool(msg.tool_calls)
-                )
+                has_tool_calls = hasattr(msg, "tool_calls") and bool(msg.tool_calls)
                 if not has_tool_calls and msg.content:
                     answer = msg.content
 
