@@ -1,23 +1,20 @@
 """
 load_raw_data.py
-─────────────────────────────────────────────────────────────────────────────
-One-time script to load all Olist CSVs into the DuckDB database as raw tables.
-Run this before `dbt run` to populate the source schema.
 
-Usage (from the supply-chain-agent/ root):
+One-time script to load all Olist CSVs into the DuckDB database as raw tables.
+Run this before dbt run to populate the source schema.
+
+Usage (from the supply-chain-agent root):
     python data/load_raw_data.py
 """
 
 import duckdb
-import os
 from pathlib import Path
 
-# ── Config ────────────────────────────────────────────────────────────────
 DB_PATH  = Path(__file__).parent / "supply_chain.duckdb"
 DATA_DIR = Path(__file__).parent
 SCHEMA   = "raw"
 
-# Maps source table name → CSV filename
 CSV_MAP = {
     "olist_orders_dataset":              "olist_orders_dataset.csv",
     "olist_order_items_dataset":         "olist_order_items_dataset.csv",
@@ -30,7 +27,7 @@ CSV_MAP = {
     "product_category_name_translation": "product_category_name_translation.csv",
 }
 
-# ── Load ──────────────────────────────────────────────────────────────────
+
 def load():
     print(f"Connecting to DuckDB at: {DB_PATH}")
     con = duckdb.connect(str(DB_PATH))
@@ -39,7 +36,7 @@ def load():
     for table_name, csv_file in CSV_MAP.items():
         csv_path = DATA_DIR / csv_file
         if not csv_path.exists():
-            print(f"  MISSING: {csv_file} — skipping")
+            print(f"  MISSING: {csv_file}, skipping")
             continue
 
         con.execute(f"DROP TABLE IF EXISTS {SCHEMA}.{table_name}")
@@ -54,6 +51,7 @@ def load():
 
     con.close()
     print(f"\nDone. Database saved to: {DB_PATH}")
+
 
 if __name__ == "__main__":
     load()

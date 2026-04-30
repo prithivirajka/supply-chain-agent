@@ -1,6 +1,6 @@
 """
 models.py
-─────────────────────────────────────────────────────────────────────────────
+
 Pydantic request and response schemas for the FastAPI endpoints.
 """
 
@@ -19,13 +19,13 @@ class QueryRequest(BaseModel):
 
 
 class QueryResponse(BaseModel):
-    question:             str
-    answer:               str
-    sql_used:             Optional[str]   = None
-    rows:                 Optional[list]  = None
-    row_count:            int             = 0
-    execution_time_sec:   float           = 0.0
-    error:                Optional[str]   = None
+    question:           str
+    answer:             str
+    sql_used:           Optional[str]  = None
+    rows:               Optional[list] = None
+    row_count:          int            = 0
+    execution_time_sec: float          = 0.0
+    error:              Optional[str]  = None
 
 
 class SchemaResponse(BaseModel):
