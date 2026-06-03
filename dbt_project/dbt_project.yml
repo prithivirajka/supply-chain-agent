@@ -1,11 +1,9 @@
-name: 'supply_chain_agent'
+name: 'conversational_supply_chain'
 version: '1.0.0'
 config-version: 2
 
-# This setting configures which "profile" dbt uses for this project.
-profile: 'supply_chain_agent'
+profile: 'conversational_supply_chain'
 
-# These configurations specify where dbt should look for different types of files.
 model-paths: ["models"]
 analysis-paths: ["analyses"]
 test-paths: ["tests"]
@@ -17,9 +15,8 @@ clean-targets:
   - "target"
   - "dbt_packages"
 
-# Model configurations by layer
 models:
-  supply_chain_agent:
+  conversational_supply_chain:
 
     staging:
       +materialized: view
@@ -36,19 +33,14 @@ models:
       +schema: marts
       +tags: ["marts"]
 
-# Variables used across models
 vars:
-  # Date range filter for incremental/analysis runs
   start_date: '2016-01-01'
   end_date: '2018-12-31'
 
-  # Delivery SLA thresholds (in days)
-  late_delivery_threshold_days: 0      # delivered after estimated date = late
-  critical_delay_threshold_days: 7     # 7+ days late = critical
+  late_delivery_threshold_days: 0
+  critical_delay_threshold_days: 7
 
-  # Order value thresholds (BRL)
   high_value_order_threshold: 500
 
-  # Review score thresholds
   positive_review_min_score: 4
   negative_review_max_score: 2

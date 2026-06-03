@@ -1,6 +1,6 @@
-# dbt Project
+# dbt Project — Conversational Supply Chain Analytics
 
-This directory contains the dbt project that transforms raw Olist data into a clean semantic layer backed by DuckDB.
+This dbt project transforms raw Olist Brazilian E-Commerce data into a clean semantic layer backed by DuckDB. It is the data foundation for the conversational analytics agent.
 
 ## Quick Start
 
@@ -62,7 +62,7 @@ Business logic and joins. These models are materialised as ephemeral, meaning th
 
 ### marts
 
-Final analytical tables materialised as DuckDB tables. These are what the LangChain agent queries directly.
+Final analytical tables materialised as DuckDB tables. These are what the conversational agent queries directly.
 
 | Model | Rows | Description |
 |---|---|---|

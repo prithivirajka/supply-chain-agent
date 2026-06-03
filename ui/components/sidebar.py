@@ -35,7 +35,7 @@ def render_sidebar():
     """Render the full sidebar. Returns a question string if a suggested button was clicked, otherwise None."""
 
     with st.sidebar:
-        st.markdown("## Supply Chain Agent")
+        st.markdown("## Conversational Supply Chain Analytics")
         st.caption("Olist Brazilian E-Commerce, 2016 to 2018")
 
         st.divider()

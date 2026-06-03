@@ -1,7 +1,7 @@
 """
 main.py
 
-FastAPI application exposing the supply chain agent as a REST API.
+FastAPI application exposing the conversational supply chain agent as a REST API.
 
 Endpoints:
   GET  /health   checks that the API, database, and model are reachable
@@ -32,7 +32,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Supply Chain Agent API",
+    title="Conversational Supply Chain Analytics API",
     description="Natural language querying of Olist supply chain data powered by LangChain, Claude, and DuckDB.",
     version="1.0.0",
     lifespan=lifespan,

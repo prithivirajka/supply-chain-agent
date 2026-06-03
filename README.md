@@ -1,6 +1,6 @@
-# Supply Chain Analytics
+# Conversational Supply Chain Analytics
 
-A natural language analytics agent for supply chain data, built on the Olist Brazilian E-Commerce dataset. Ask questions in plain English and get answers backed by real SQL queries against a dbt-modeled DuckDB database.
+A conversational analytics agent for supply chain data, built on the Olist Brazilian E-Commerce dataset. Ask questions in plain English and get answers backed by real SQL queries against a dbt-modeled DuckDB database.
 
 ## What This Project Does
 
@@ -9,7 +9,7 @@ The project has three layers working together. First, a dbt semantic layer trans
 ## Project Structure
 
 ```
-supply-chain-agent/
+Conversational-Supply-Chain-Analytics/
 ├── dbt_project/          # dbt models, tests, and configuration
 │   ├── models/
 │   │   ├── staging/      # one model per raw source table

@@ -1,7 +1,7 @@
 """
 app.py
 
-Main Streamlit application for the Supply Chain Analytics Agent.
+Main Streamlit application for the Conversational Supply Chain Analytics agent.
 
 Run with:
     streamlit run ui/app.py
@@ -26,7 +26,7 @@ from ui.components.chat import (
 from ui.components.utils import post_query
 
 st.set_page_config(
-    page_title="Supply Chain Agent",
+    page_title="Conversational Supply Chain Analytics",
     page_icon="📦",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -42,7 +42,7 @@ suggested = render_sidebar()
 if suggested:
     st.session_state.pending_question = suggested
 
-st.title("Supply Chain Agent")
+st.title("Conversational Supply Chain Analytics")
 st.caption(
     "Ask natural language questions about the Olist supply chain dataset. "
     "Powered by Claude, LangChain, and DuckDB."
